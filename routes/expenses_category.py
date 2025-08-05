@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import sys
 import os
 from dependencies import get_db_connection
+from utils import helper
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -67,7 +68,7 @@ def delete_expense_category(request: Request, db=Depends(get_db_connection)):
         raise HTTPException(status_code=500, detail=str(e))
     
 @router.get('/list')
-def list_expense_categories( request:Request, db=Depends(get_db_connection)):
+def list_expense_categories( request:Request, db=Depends(get_db_connection), page: int = 1, limit: int = 10):
     try:
         user_id= request.state.current_user
         cursor = db.cursor()
@@ -75,7 +76,7 @@ def list_expense_categories( request:Request, db=Depends(get_db_connection)):
         cursor.execute(list_expense_query, (user_id,))
         expenses = cursor.fetchall()
         cursor.close()
-        return {"status_code": 200, "data": expenses}
+        return {"status_code": 200, "data": helper.pagination(expenses, page, limit)}
     except Exception as e:
         print(f"Error occured: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -49,8 +49,28 @@ def update_budget(budget_id: int, budget: BudgetUpdate, request: Request, db=Dep
             raise HTTPException(status_code=404, detail="Budget not found")
         if existing_budget[3] != user_id:
             raise HTTPException(status_code=403, detail="You are not authorized to update this budget")
-        update_budget_query = "UPDATE PFT.BUDGET SET category_id = %s, budget_month = %s, budget_amount = %s WHERE id = %s AND user_id = %s"
-        cursor.execute(update_budget_query, (budget.category_id, budget.month, budget.amount, budget_id, user_id))
+
+        update_fields = []
+        update_values = []
+        
+        if budget.category_id is not None:
+            update_fields.append("category_id = %s")
+            update_values.append(budget.category_id)
+        
+        if budget.month is not None:
+            update_fields.append("budget_month = %s")
+            update_values.append(budget.month)
+        
+        if budget.amount is not None:
+            update_fields.append("budget_amount = %s")
+            update_values.append(budget.amount)
+        
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="No fields provided for update")
+        
+        update_budget_query = f"UPDATE PFT.BUDGET SET {', '.join(update_fields)} WHERE id = %s AND user_id = %s"
+        update_values.extend([budget_id, user_id])
+        cursor.execute(update_budget_query, tuple(update_values))
         
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Budget not found or no changes made")

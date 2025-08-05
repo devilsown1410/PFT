@@ -3,13 +3,14 @@ from pydantic import BaseModel
 import sys
 import os
 from dependencies import get_db_connection
+from utils import helper
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 router = APIRouter()
 
 @router.get("/gcm")
-def get_gcm(request: Request, db=Depends(get_db_connection)):
+def get_gcm(request: Request, db=Depends(get_db_connection), page: int = 1, limit: int = 10):
     try:
         user_id = request.state.current_user
         cursor = db.cursor()
