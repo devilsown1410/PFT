@@ -1,9 +1,8 @@
 import jwt
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 import sys
 import os
 import dotenv
-
 
 dotenv.load_dotenv()
 
@@ -26,21 +25,27 @@ def validate_token(token: str, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 async def validate_jwt_middleware(request: Request, call_next):
-    if("/auth" in request.url.path):
-        print("Skipping JWT validation for auth route:", request.url.path)
+    if("/auth" in request.url.path or "/docs" in request.url.path or "/openapi.json" in request.url.path):
         return await call_next(request)
-    token = request.headers.get("Authorization").split(" ")[1]
-    print("Authorization header:", token)
-    if not token:
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
         raise HTTPException(status_code=401, detail="Authorization header missing")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header format")
+    try:
+        token = auth_header.split(" ")[1]
+    except IndexError:
+        raise HTTPException(status_code=401, detail="Token missing in authorization header")
+    
+    if not token:
+        raise HTTPException(status_code=401, detail="Token is empty")
+    
     try:
         validate_token(token, request)
-        print("Token is valid, proceeding with request")
-        print("Request state after validation:", request.state.current_user)
         response = await call_next(request)
         return response
-    except HTTPException as e:
-        return e
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error in JWT validation middleware: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

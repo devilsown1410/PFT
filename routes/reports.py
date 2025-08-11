@@ -1,62 +1,16 @@
-from fastapi import APIRouter,Request, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter,Request
 import sys
 import os
-from dependencies import get_db_connection
-from utils import helper
+from controllers.reports import get_gcm as get_gcm_controller, get_gtbm as get_gtbm_controller
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 router = APIRouter()
 
 @router.get("/gcm")
-def get_gcm(request: Request, db=Depends(get_db_connection), page: int = 1, limit: int = 10):
-    try:
-        user_id = request.state.current_user
-        cursor = db.cursor()
-        get_gcm_query = "SELECT TO_CHAR(UT.transaction_date, 'YYYY-MM'),C.name,SUM(UT.amount) AS month_expense FROM PFT.USER_TRANSACTIONS UT JOIN PFT.EXPENSE_CATEGORY C ON UT.category_id = C.id WHERE UT.user_id = %s AND UT.transaction_type='expense' GROUP BY TO_CHAR(UT.transaction_date, 'YYYY-MM'),C.name ORDER BY C.name;"
-        cursor.execute(get_gcm_query, (user_id,))
-        result = cursor.fetchall()
-        cursor.close()
-        return {"status_code": 200, "data": result}
-    except Exception as e:
-        print(f"Error occurred: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
+def get_gcm(request: Request, page: int = 1, limit: int = 10):
+    return get_gcm_controller(request, page, limit)
 
 @router.get("/gtbm/{month}")
-def get_gtbm(request: Request, db=Depends(get_db_connection)):
-    try:
-        user_id = request.state.current_user
-        month = request.path_params['month']
-        cursor = db.cursor()
-        get_gtbm_query = """
-        SELECT TO_CHAR(UT.transaction_date, 'YYYY-MM') AS month,
-        SUM(CASE WHEN UT.transaction_type= 'income' THEN UT.amount WHEN UT.transaction_type= 'expense' THEN -UT.amount ELSE 0 END) AS net_total,
-        SUM(CASE WHEN UT.transaction_type= 'income' THEN UT.amount ELSE 0 END) AS total_income,
-        SUM(CASE WHEN UT.transaction_type= 'expense' THEN UT.amount ELSE 0 END) AS total_expenses,
-        COUNT(UT.id) AS transaction_count
-        FROM PFT.USER_TRANSACTIONS UT
-        WHERE UT.user_id = %s AND TO_CHAR(UT.transaction_date, 'YYYY-MM') = %s
-        GROUP BY TO_CHAR(UT.transaction_date, 'YYYY-MM')
-        ;"""
-        cursor.execute(get_gtbm_query, (user_id, month))
-        result = cursor.fetchone()
-        cursor.close()
-        if result:
-            return {
-                "status_code": 200,
-                "data": {
-                    "month": result[0],
-                    "net_total": result[1],
-                    "total_income": result[2],
-                    "total_expenses": result[3],
-                    "transaction_count": result[4]
-                }
-            }
-        else:
-            raise HTTPException(status_code=404, detail="No data found for the specified month")
-    except Exception as e:
-        print(f"Error occurred: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+def get_gtbm(request: Request, month: str):
+    return get_gtbm_controller(request, month)
