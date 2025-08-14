@@ -25,7 +25,7 @@ def validate_token(token: str, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 async def validate_jwt_middleware(request: Request, call_next):
-    if("/auth" in request.url.path or "/docs" in request.url.path or "/openapi.json" in request.url.path):
+    if("/auth" in request.url.path or "/docs" in request.url.path or "/openapi.json" in request.url.path or "/redoc" in request.url.path or "/" in request.url.path):
         return await call_next(request)
     auth_header = request.headers.get("Authorization")
     if not auth_header:

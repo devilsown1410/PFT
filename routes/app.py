@@ -10,6 +10,9 @@ from .reports import router as reports_router
 
 app = FastAPI()
 
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the Personal Finance Tracker API"}
 app.include_router(auth_router, prefix="/auth", tags=["authentication"])
 @app.middleware("http")
 async def add_jwt_validation_middleware(request, call_next):
