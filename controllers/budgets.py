@@ -10,7 +10,16 @@ def create_budget(budget, request):
         cursor.execute(add_budget_query, (user_id, budget.category_id, budget.month, budget.amount))
         db.commit()
         cursor.close()
-        return {"status_code": 200, "detail": "Budget created successfully"}
+        return {
+            "success": True,
+            "message": "Budget created successfully",
+            "data": {
+                "user_id": user_id,
+                "category_id": budget.category_id,
+                "month": budget.month,
+                "amount": f"${budget.amount}"
+            }
+        }
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -23,7 +32,6 @@ def update_budget(budget_id, budget, request):
         cursor = db.cursor()
         check_budget_query = "SELECT * FROM PFT.BUDGET WHERE id = %s AND user_id = %s"
         cursor.execute(check_budget_query, (budget_id, user_id))
-        print(f"Checking budget with ID {budget_id} for user {user_id}")
         existing_budget = cursor.fetchone()
         if not existing_budget:
             raise HTTPException(status_code=404, detail="Budget not found")
@@ -55,10 +63,43 @@ def update_budget(budget_id, budget, request):
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Budget not found or no changes made")
         
-        print(f"Updated budget with ID {budget_id} for user {user_id}")
         db.commit()
         cursor.close()
-        return {"status_code": 200, "detail": "Budget updated successfully"}
+        return {
+            "success": True,
+            "message": "Budget updated successfully",
+            "data": {
+                "budget_id": budget_id,
+                "category_id": budget.category_id,
+                "month": budget.month,
+                "amount": f"${budget.amount}"
+            }
+        }
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+
+def list_budgets(request, page=1, limit=10):
+    try:
+        user_id = request.state.current_user
+        cursor = db.cursor()
+        list_budgets_query = "SELECT * FROM PFT.BUDGET WHERE user_id = %s ORDER BY budget_month LIMIT %s OFFSET %s"
+        offset = (page - 1) * limit
+        cursor.execute(list_budgets_query, (user_id, limit, offset))
+        budgets = cursor.fetchall()
+        cursor.close()
+        return {
+            "success": True,
+            "message": "Budgets retrieved successfully",
+            "data": list(map(lambda x: {
+                "id": x[0],
+                "month": x[1],
+                "amount": f"${x[2]}",
+                "category_id": x[4]
+            }, budgets))
+        }
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

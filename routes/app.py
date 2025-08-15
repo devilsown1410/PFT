@@ -8,11 +8,18 @@ from .budgets import router as budgets_router
 from .reports import router as reports_router
 
 
-app = FastAPI()
+app = FastAPI(
+    title="Personal Finance Tracker API",
+    description="A comprehensive API for managing personal finances",
+    version="1.0.0"
+)
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the Personal Finance Tracker API"}
+    return {
+        "success": True,
+        "message": "Welcome to the Personal Finance Tracker API",
+    }
 app.include_router(auth_router, prefix="/auth", tags=["authentication"])
 @app.middleware("http")
 async def add_jwt_validation_middleware(request, call_next):

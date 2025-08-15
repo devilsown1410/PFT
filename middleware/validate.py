@@ -10,12 +10,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def validate_token(token: str, request: Request):
     try:
-        print("Validating token:", token)
         decode_token = jwt.decode(token, os.environ["secret_key"], algorithms=["HS256"])
         print("Decoded token:", decode_token)
         user_id = decode_token['user_id']
         request.state.current_user = user_id 
-        print("Current user set in request state:", user_id)
         return decode_token
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
@@ -25,7 +23,7 @@ def validate_token(token: str, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 async def validate_jwt_middleware(request: Request, call_next):
-    if("/auth" in request.url.path or "/docs" in request.url.path or "/openapi.json" in request.url.path or "/redoc" in request.url.path or "/" in request.url.path):
+    if("/auth" in request.url.path or "/docs" in request.url.path or "/openapi.json" in request.url.path or "/redoc" in request.url.path):
         return await call_next(request)
     auth_header = request.headers.get("Authorization")
     if not auth_header:
@@ -42,6 +40,7 @@ async def validate_jwt_middleware(request: Request, call_next):
     
     try:
         validate_token(token, request)
+        print("Token validated successfully")
         response = await call_next(request)
         return response
     except HTTPException:

@@ -5,14 +5,12 @@ class Transaction(BaseModel):
     description: str
     category_id: int
     transaction_type: str
-    transaction_date: str
 
 class TransactionUpdate(BaseModel):
     amount: Optional[float] = None
     description: Optional[str] = None
     category_id: Optional[int] = None
     transaction_type: Optional[str] = None
-    transaction_date: Optional[str] = None
 
 class SearchQuery(BaseModel):
     start_date: Optional[str] = None

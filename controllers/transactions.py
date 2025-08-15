@@ -1,52 +1,61 @@
 from fastapi import HTTPException
 from utils import helper
 from config.snowflake import connection
-from datetime import datetime
+from datetime import datetime, timezone
 global db
 db = connection.get_connection()
 def create_transaction(transaction, request):
     try:
         user_id = request.state.current_user
         cursor = db.cursor()
-        print(transaction.transaction_date[:7])
+        transaction_date = datetime.now(timezone.utc).isoformat()
         if transaction.transaction_type not in ['income', 'expense']:
             raise HTTPException(status_code=400, detail="Invalid transaction type")
         budget_check_query = "SELECT budget_amount FROM PFT.BUDGET WHERE user_id = %s AND category_id = %s AND budget_month = %s"
-        cursor.execute(budget_check_query, (user_id, transaction.category_id, transaction.transaction_date[:7]))
+        cursor.execute(budget_check_query, (user_id, transaction.category_id, transaction_date[:7]))
         budget = cursor.fetchone()
-        print(f"Budget fetched: {budget}")
         if not budget:
             raise HTTPException(status_code=400, detail="Budget not found")
         check_availability_query = "SELECT SUM(amount) FROM PFT.USER_TRANSACTIONS WHERE user_id = %s AND category_id = %s AND TO_CHAR(transaction_date, 'YYYY-MM') = %s"
-        cursor.execute(check_availability_query, (user_id, transaction.category_id, transaction.transaction_date[:7]))
-
-        print(f"Checking availability for user {user_id} in category {transaction.category_id} for month {transaction.transaction_date[:7]}")
+        cursor.execute(check_availability_query, (user_id, transaction.category_id, transaction_date[:7]))
         availability = cursor.fetchone()
-        print(f"Availability fetched: {availability}")
+        
         availability= float(availability[0]) if availability[0] is not None else 0.0
-        print(f"Availability: {availability}")
+        
         global alert
         alert = ''
         if availability and transaction.transaction_type == 'expense' and (availability + transaction.amount) > budget[0]:
             percentage= (availability + transaction.amount) / float(budget[0]) * 100
-            print(f"Percentage of budget used: {percentage}")
+            
             if percentage>=80 and percentage<90:
                 alert = f"You have crossed 80% of your budget."
             elif percentage>=90 and percentage<100:
                 alert = f"You have crossed 90% of your budget."
             elif percentage>=100:
                 alert = f"You have crossed 100% of your budget."
-        if transaction.transaction_date:
-            date_obj = datetime.strptime(transaction.transaction_date, "%Y-%m-%d")
-        print(f"Adding transaction: {transaction.amount}, {transaction.description}, {transaction.category_id}, {user_id}, {transaction.transaction_type}, {date_obj.strftime('%Y-%m-%d')}")
         add_transaction_query = "INSERT INTO PFT.USER_TRANSACTIONS (amount, description, category_id, user_id, transaction_type, transaction_date) VALUES (%s, %s, %s, %s, %s, %s)"
-        cursor.execute(add_transaction_query, (transaction.amount, transaction.description, transaction.category_id, user_id, transaction.transaction_type, date_obj))
+        cursor.execute(add_transaction_query, (transaction.amount, transaction.description, transaction.category_id, user_id, transaction.transaction_type, transaction_date))
         db.commit()
         cursor.close()
+        
+        response = {
+            "success": True,
+            "message": "Transaction added successfully",
+            "data": {
+                "amount": f"${transaction.amount}",
+                "description": transaction.description,
+                "category_id": transaction.category_id,
+                "transaction_type": transaction.transaction_type,
+                "transaction_date": transaction_date
+            }
+        }
+        
         if alert:
-            return {"status_code": 200, "detail": "Transaction added successfully", "alert": alert}
-        else:
-            return {"status_code": 200, "detail": "Transaction added successfully"}
+            response["alert"] = alert
+            
+        return response
+    except HTTPException as e:
+        raise e
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -80,13 +89,6 @@ def update_transaction(transaction_id, transaction, request):
                 raise HTTPException(status_code=400, detail="Invalid transaction type")
             update_fields.append("transaction_type = %s")
             update_values.append(transaction.transaction_type)
-        if transaction.transaction_date is not None:
-            try:
-                date_obj = datetime.strptime(transaction.transaction_date, "%Y-%m-%d")
-                update_fields.append("transaction_date = %s")
-                update_values.append(date_obj)
-            except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields provided for update")
         
@@ -96,7 +98,20 @@ def update_transaction(transaction_id, transaction, request):
         cursor.execute(update_transaction_query, tuple(update_values))
         db.commit()
         cursor.close()
-        return {"status_code": 200, "detail": "Transaction updated successfully"}
+        return {
+            "success": True,
+            "message": "Transaction updated successfully",
+            "data": {
+                "transaction_id": transaction_id,
+                "amount": f"${transaction.amount}",
+                "description": transaction.description,
+                "category_id": transaction.category_id,
+                "transaction_type": transaction.transaction_type,
+                "transaction_date": existing_transaction[6]
+            }
+        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -118,7 +133,15 @@ def delete_transaction(transaction_id, request):
         cursor.execute(delete_transaction_query, (transaction_id, user_id))
         db.commit()
         cursor.close()
-        return {"status_code": 200, "detail": "Transaction deleted successfully"}
+        return {
+            "success": True,
+            "message": "Transaction deleted successfully",
+            "data": {
+                "transaction_id": transaction_id
+            }
+        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -129,11 +152,15 @@ def list_transactions(request, page: int = 1, limit: int = 10):
     try:
         user_id = request.state.current_user
         cursor = db.cursor()
-        list_transactions_query= "SELECT * FROM PFT.USER_TRANSACTIONS WHERE user_id = %s"
-        cursor.execute(list_transactions_query, (user_id,))
+        list_transactions_query= "SELECT * FROM PFT.USER_TRANSACTIONS WHERE user_id = %s ORDER BY transaction_date DESC LIMIT %s OFFSET %s"
+        cursor.execute(list_transactions_query, (user_id, limit, (page - 1) * limit))
         transactions = cursor.fetchall()
         cursor.close()
-        return {"status_code": 200, "data": helper.pagination(transactions, page, limit)}
+        return {
+            "success": True,
+            "message": "Transactions retrieved successfully",
+            "data": helper.transaction_response(transactions)
+        }
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -150,7 +177,13 @@ def get_transaction(transaction_id, request):
         cursor.close()
         if not transaction:
             raise HTTPException(status_code=404, detail="Transaction not found")
-        return {"status_code": 200, "data": transaction}
+        return {
+            "success": True,
+            "message": "Transaction retrieved successfully",
+            "data": helper.transaction_response(transaction)
+        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -159,7 +192,6 @@ def get_transaction(transaction_id, request):
 
 def search_transactions(field, search_query, request, page: int = 1, limit: int = 10):
     try:
-        print(f"Searching transactions with field: {field} and query: {search_query}")
         user_id = request.state.current_user
         cursor = db.cursor()
         if field == "transaction_type":
@@ -167,20 +199,26 @@ def search_transactions(field, search_query, request, page: int = 1, limit: int 
                 raise HTTPException(status_code=400, detail="Transaction type is required for type search")
             if search_query.transaction_type not in ['income', 'expense']:
                 raise HTTPException(status_code=400, detail="Invalid transaction type")
-            cursor.execute("SELECT * FROM PFT.USER_TRANSACTIONS WHERE user_id = %s AND transaction_type = %s", (user_id, search_query.transaction_type))
+            cursor.execute("SELECT * FROM PFT.USER_TRANSACTIONS WHERE user_id = %s AND transaction_type = %s LIMIT %s OFFSET %s", (user_id, search_query.transaction_type,limit, (page - 1) * limit))
         elif field == "category":
             if not search_query.category_id:
                 raise HTTPException(status_code=400, detail="Category ID is required for category search")
-            cursor.execute("SELECT * FROM PFT.USER_TRANSACTIONS WHERE user_id = %s AND category_id = %s", (user_id, search_query.category_id))
+            cursor.execute("SELECT * FROM PFT.USER_TRANSACTIONS WHERE user_id = %s AND category_id = %s LIMIT %s OFFSET %s", (user_id, search_query.category_id, limit, (page - 1) * limit))
         elif field == "date":
             if not search_query.start_date or not search_query.end_date:
                 raise HTTPException(status_code=400, detail="Start date and end date are required for date search")
-            cursor.execute("SELECT * FROM PFT.USER_TRANSACTIONS WHERE user_id = %s AND transaction_date BETWEEN %s AND %s", (user_id, search_query.start_date, search_query.end_date))
+            cursor.execute("SELECT * FROM PFT.USER_TRANSACTIONS WHERE user_id = %s AND transaction_date BETWEEN %s AND %s LIMIT %s OFFSET %s", (user_id, search_query.start_date, search_query.end_date, limit, (page - 1) * limit))
         else:
             raise HTTPException(status_code=400, detail="Invalid search field")
         results = cursor.fetchall()
         cursor.close()
-        return {"status_code": 200, "data": helper.pagination(results, page, limit)}
+        return {
+            "success": True,
+            "message": "Transactions retrieved successfully",
+            "data": helper.transaction_response(results)
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

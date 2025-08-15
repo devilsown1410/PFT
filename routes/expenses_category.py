@@ -1,5 +1,4 @@
 from fastapi import APIRouter,Request
-from pydantic import BaseModel
 import sys
 import os
 from models.expenses import Expense
@@ -23,8 +22,8 @@ def delete_expense_category(request: Request):
     return delete_expense_controller(request)
 
 @router.get('/list')
-def list_expense_categories( request:Request):
-    return list_expenses_controller(request)
+def list_expense_categories( request:Request, page: int = 1, limit: int = 10):
+    return list_expenses_controller(request, page, limit)
     
 @router.get('/get/{id}')
 def get_expense_category(id: int, request: Request):
