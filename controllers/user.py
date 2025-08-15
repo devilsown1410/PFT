@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 from config.snowflake import connection
+import bcrypt
 db = connection.get_connection()
 async def get_user_profile(username):
     print(f"Fetching profile for user: {username}")
@@ -79,3 +80,38 @@ async def delete_user_profile(username):
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+async def update_user_password(request, username, new_password):
+    try:
+        user_id = request.state.current_user
+        cursor = db.cursor()
+        if not new_password:
+            raise HTTPException(status_code=400, detail="New password is required")
+        user_query = "SELECT * FROM PFT.USERS WHERE id = %s"
+        cursor.execute(user_query, (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user[1] != username:
+            raise HTTPException(status_code=403, detail="You are not authorized to update this user's password")
+        if bcrypt.checkpw(new_password.encode('utf-8'), user[3].encode('utf-8')):
+            raise HTTPException(status_code=400, detail="New password cannot be the same as the old password")
+        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+        update_query = "UPDATE PFT.USERS SET password = %s WHERE id = %s"
+        cursor.execute(update_query, (hashed_password.decode('utf-8'), user_id))
+        db.commit()
+        cursor.close()
+        return {
+            "success": True,
+            "message": "Password updated successfully",
+            "data": {
+                "username": username
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
