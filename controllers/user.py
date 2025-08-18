@@ -34,18 +34,35 @@ async def update_user_profile(username, user_data):
     print(f"Updating profile for user: {username}")
     try:
         cursor = db.cursor()
-        query = "UPDATE PFT.USERS SET email = %s WHERE username = %s"
-        cursor.execute(query, (user_data.email, username))
+        update_fields = []
+        update_values = []
+        
+        if user_data.email is not None:
+            update_fields.append("email = %s")
+            update_values.append(user_data.email)
+        
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="No fields provided for update")
+        
+        update_values.append(username)
+        query = f"UPDATE PFT.USERS SET {', '.join(update_fields)} WHERE username = %s"
+        
+        cursor.execute(query, tuple(update_values))
         db.commit()
         affected_rows = cursor.rowcount
-        cursor.close()
+        cursor.close()        
         if affected_rows > 0:
+            cursor = db.cursor()
+            cursor.execute("SELECT username, email FROM PFT.USERS WHERE username = %s", (username,))
+            user = cursor.fetchone()
+            cursor.close()
+            
             return {
                 "success": True,
                 "message": "User profile updated successfully",
                 "data": {
-                    "username": username,
-                    "email": user_data.email
+                    "username": user[0],
+                    "email": user[1]
                 }
             }
         else:
