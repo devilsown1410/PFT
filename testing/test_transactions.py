@@ -13,15 +13,15 @@ class TestTransactionRoutes:
     
     @pytest.fixture(autouse=True)
     def setup_and_teardown(self):
-        self.user_data = {
+        self.test_user_data = {
             "username": "testuser123",
             "email": "test@example.com",
             "password": "testpassword123"
         }
-        client.post("/auth/register", json=self.user_data)
+        client.post("/auth/register", json=self.test_user_data)
         login_response = client.post("/auth/login", json={
-            "username": self.user_data["username"],
-            "password": self.user_data["password"]
+            "username": self.test_user_data["username"],
+            "password": self.test_user_data["password"]
         })
         self.token = login_response.json()["token"]
         self.headers = {"Authorization": f"Bearer {self.token}"}
@@ -33,9 +33,9 @@ class TestTransactionRoutes:
             current_month = datetime.now().strftime("%Y-%m")          
             db = connection.get_connection()
             cursor = db.cursor()
-            cursor.execute("DELETE FROM PFT.USER_TRANSACTIONS WHERE user_id = (SELECT id FROM PFT.USERS WHERE username = %s)", (self.user_data["username"],))
-            cursor.execute("DELETE FROM PFT.BUDGET WHERE user_id = (SELECT id FROM PFT.USERS WHERE username = %s) AND budget_month = %s", (self.user_data["username"], current_month))
-            cursor.execute("DELETE FROM PFT.USERS WHERE username = %s", (self.user_data["username"],))
+            cursor.execute("DELETE FROM PFT.USER_TRANSACTIONS WHERE user_id = (SELECT id FROM PFT.USERS WHERE username = %s)", (self.test_user_data["username"],))
+            cursor.execute("DELETE FROM PFT.BUDGET WHERE user_id = (SELECT id FROM PFT.USERS WHERE username = %s) AND budget_month = %s", (self.test_user_data["username"], current_month))
+            cursor.execute("DELETE FROM PFT.USERS WHERE username = %s", (self.test_user_data["username"],))
             db.commit()
             cursor.close()
         except Exception as e:

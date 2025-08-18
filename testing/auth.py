@@ -13,7 +13,7 @@ client = TestClient(app)
 class TestAuthRoutes:
     @pytest.fixture(autouse=True)
     def setup_and_teardown(self):
-        self.user_data = {
+        self.test_user_data = {
             "username": "testuser123",
             "email": "test@example.com",
             "password": "testpassword123"
@@ -22,32 +22,32 @@ class TestAuthRoutes:
         try:
             db = connection.get_connection()
             cursor = db.cursor()
-            cursor.execute("DELETE FROM PFT.USERS WHERE username = %s", (self.user_data["username"],))
+            cursor.execute("DELETE FROM PFT.USERS WHERE username = %s", (self.test_user_data["username"],))
             db.commit()
             cursor.close()
         except Exception as e:
             print(f"Cleanup error: {e}")
 
     def register_success(self):
-        response = client.post("/auth/register", json=self.user_data)
+        response = client.post("/auth/register", json=self.test_user_data)
         assert response.status_code == 200
         data = response.json()
         assert data["success"] == True
         assert data["message"] == "User registered successfully"
-        assert data["data"]["username"] == self.user_data["username"]
+        assert data["data"]["username"] == self.test_user_data["username"]
 
     def register_duplicate_username(self):
-        client.post("/auth/register", json=self.user_data)
+        client.post("/auth/register", json=self.test_user_data)
 
-        response = client.post("/auth/register", json=self.user_data)
+        response = client.post("/auth/register", json=self.test_user_data)
         
         assert response.status_code == 400
 
     def login_success(self):
-        client.post("/auth/register", json=self.user_data)    
+        client.post("/auth/register", json=self.test_user_data)
         login_data = {
-            "username": self.user_data["username"],
-            "password": self.user_data["password"]
+            "username": self.test_user_data["username"],
+            "password": self.test_user_data["password"]
         }
         response = client.post("/auth/login", json=login_data)
         assert response.status_code == 200
@@ -64,10 +64,10 @@ class TestAuthRoutes:
         assert response.status_code == 401
 
     def forgot_password_success(self):
-        client.post("/auth/register", json=self.user_data)
+        client.post("/auth/register", json=self.test_user_data)
         forgot_data = {
-            "username": self.user_data["username"],
-            "email": self.user_data["email"],
+            "username": self.test_user_data["username"],
+            "email": self.test_user_data["email"],
             "new_password": "newpassword123"
         }        
         response = client.patch("/auth/forgot-password", json=forgot_data)       
