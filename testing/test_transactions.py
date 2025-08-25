@@ -1,12 +1,13 @@
 import pytest
 import sys
 import os
+import asyncio
 from fastapi.testclient import TestClient
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from routes.app import app
-from config.snowflake import connection
+from config.snowflake import async_db_manager
 
 client = TestClient(app)
 class TestTransactionRoutes:
@@ -29,17 +30,26 @@ class TestTransactionRoutes:
         yield
 
         try:
-            from datetime import datetime
-            current_month = datetime.now().strftime("%Y-%m")          
-            db = connection.get_connection()
-            cursor = db.cursor()
-            cursor.execute("DELETE FROM PFT.USER_TRANSACTIONS WHERE user_id = (SELECT id FROM PFT.USERS WHERE username = %s)", (self.test_user_data["username"],))
-            cursor.execute("DELETE FROM PFT.BUDGET WHERE user_id = (SELECT id FROM PFT.USERS WHERE username = %s) AND budget_month = %s", (self.test_user_data["username"], current_month))
-            cursor.execute("DELETE FROM PFT.USERS WHERE username = %s", (self.test_user_data["username"],))
-            db.commit()
-            cursor.close()
+            asyncio.run(self._async_cleanup())
         except Exception as e:
             print(f"Cleanup error: {e}")
+    
+    async def _async_cleanup(self):
+        from datetime import datetime
+        current_month = datetime.now().strftime("%Y-%m")
+        
+        await async_db_manager.execute_command_async(
+            "DELETE FROM PFT.USER_TRANSACTIONS WHERE user_id = (SELECT id FROM PFT.USERS WHERE username = %s)", 
+            (self.test_user_data["username"],)
+        )
+        await async_db_manager.execute_command_async(
+            "DELETE FROM PFT.BUDGET WHERE user_id = (SELECT id FROM PFT.USERS WHERE username = %s) AND budget_month = %s", 
+            (self.test_user_data["username"], current_month)
+        )
+        await async_db_manager.execute_command_async(
+            "DELETE FROM PFT.USERS WHERE username = %s", 
+            (self.test_user_data["username"],)
+        )
 
     def create_transaction_success(self):
         from datetime import datetime

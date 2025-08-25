@@ -1,12 +1,10 @@
 from fastapi import HTTPException
-from config.snowflake import connection
+from config.snowflake import async_db_manager
 from utils import helper
-global db
-db = connection.get_connection()
-def get_gcm(request, page, limit):
+
+async def get_gcm(request, page, limit):
     try:
         user_id = request.state.current_user
-        cursor = db.cursor()
         get_gcm_query = """
         SELECT 
             TO_CHAR(UT.transaction_date, 'YYYY-MM') AS month,
@@ -29,9 +27,11 @@ def get_gcm(request, page, limit):
         ORDER BY C.name 
         LIMIT %s OFFSET %s
         """
-        cursor.execute(get_gcm_query, (user_id, limit, (page - 1) * limit))
-        result = cursor.fetchall()
-        cursor.close()
+        result = await async_db_manager.execute_query_async(
+            get_gcm_query, 
+            (user_id, limit, (page - 1) * limit)
+        )
+        
         return {
             "success": True,
             "message": "Category monthly report retrieved successfully",
@@ -43,16 +43,14 @@ def get_gcm(request, page, limit):
                 "alert": x[4] if x[3] is not None else "No Budget Set"
             }, result))
         }
+        
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
 
-def get_gtbm(request, month):
+async def get_gtbm(request, month):
     try:
         user_id = request.state.current_user
-        cursor = db.cursor()
         get_gtbm_query = """
         SELECT TO_CHAR(UT.transaction_date, 'YYYY-MM') AS month,
         SUM(CASE WHEN UT.transaction_type= 'income' THEN UT.amount WHEN UT.transaction_type= 'expense' THEN -UT.amount ELSE 0 END) AS net_total,
@@ -63,12 +61,11 @@ def get_gtbm(request, month):
         WHERE UT.user_id = %s AND TO_CHAR(UT.transaction_date, 'YYYY-MM') = %s
         GROUP BY TO_CHAR(UT.transaction_date, 'YYYY-MM')
         ;"""
-        cursor.execute(get_gtbm_query, (user_id, month))
-        result = cursor.fetchone()
-        transaction_query= "SELECT * FROM PFT.USER_TRANSACTIONS WHERE user_id = %s AND TO_CHAR(transaction_date, 'YYYY-MM') = %s"
-        cursor.execute(transaction_query, (user_id, month))
-        transactions_data = cursor.fetchall()
-        cursor.close()
+        result = await async_db_manager.execute_query_one_async(get_gtbm_query, (user_id, month))
+        
+        transaction_query = "SELECT * FROM PFT.USER_TRANSACTIONS WHERE user_id = %s AND TO_CHAR(transaction_date, 'YYYY-MM') = %s"
+        transactions_data = await async_db_manager.execute_query_async(transaction_query, (user_id, month))
+        
         if result:
             return {
                 "success": True,
@@ -94,6 +91,7 @@ def get_gtbm(request, month):
             }
         else:
             raise HTTPException(status_code=404, detail="No data found for the specified month")
+            
     except HTTPException:
         raise
     except Exception as e:

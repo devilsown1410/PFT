@@ -1,12 +1,13 @@
 import pytest
 import sys
 import os
+import asyncio
 from fastapi.testclient import TestClient
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from routes.app import app
-from config.snowflake import connection
+from config.snowflake import async_db_manager
 
 client = TestClient(app)
 
@@ -28,13 +29,15 @@ class TestUserRoutes:
         
         yield
         try:
-            db = connection.get_connection()
-            cursor = db.cursor()
-            cursor.execute("DELETE FROM PFT.USERS WHERE username = %s", (self.test_user_data["username"],))
-            db.commit()
-            cursor.close()
+            asyncio.run(self._async_cleanup())
         except Exception as e:
             print(f"Cleanup error: {e}")
+    
+    async def _async_cleanup(self):
+        await async_db_manager.execute_command_async(
+            "DELETE FROM PFT.USERS WHERE username = %s", 
+            (self.test_user_data["username"],)
+        )
 
     def test_get_user_profile_success(self):
         response = client.get(f"/users/profile/{self.test_user_data['username']}", headers=self.headers)

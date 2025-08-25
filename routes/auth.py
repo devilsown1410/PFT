@@ -6,17 +6,17 @@ router = APIRouter()
 
 
 @router.get("/")
-def read_root():
+async def read_root():
     return {"message": "Welcome to the FastAPI application!"}
 
 @router.post("/register")
-def register_user(user_data: UserRegister):
-    return auth_register(user_data)
+async def register_user(user_data: UserRegister):
+    return await auth_register(user_data)
 
 @router.post("/login")
-def login_user(user_data: UserLogin):
-    return auth_login(user_data)
+async def login_user(user_data: UserLogin):
+    return await auth_login(user_data)
 
 @router.patch("/forgot-password")
-def forgot_password(user_data: ForgotPassword):
-    return auth_forgot_password(user_data)
+async def forgot_password(user_data: ForgotPassword):
+    return await auth_forgot_password(user_data)

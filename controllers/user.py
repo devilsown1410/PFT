@@ -1,15 +1,13 @@
 from fastapi import HTTPException
-from config.snowflake import connection
+from config.snowflake import async_db_manager
 import bcrypt
-db = connection.get_connection()
+
 async def get_user_profile(username):
     print(f"Fetching profile for user: {username}")
     try:
-        cursor= db.cursor()
         query = "SELECT username as username, email as email FROM PFT.USERS WHERE username = %s"
-        cursor.execute(query, (username,))
-        user = cursor.fetchone()
-        cursor.close()
+        user = await async_db_manager.execute_query_one_async(query, (username,))
+        
         if user:
             username, email = user
             print(f"Returning user profile: {username}, {email}")
@@ -21,9 +19,9 @@ async def get_user_profile(username):
                     "email": email
                 }
             }
-
         else:
             raise HTTPException(status_code=404, detail="User not found")
+            
     except HTTPException:
         raise
     except Exception as e:
@@ -33,7 +31,6 @@ async def get_user_profile(username):
 async def update_user_profile(username, user_data):
     print(f"Updating profile for user: {username}")
     try:
-        cursor = db.cursor()
         update_fields = []
         update_values = []
         
@@ -47,15 +44,11 @@ async def update_user_profile(username, user_data):
         update_values.append(username)
         query = f"UPDATE PFT.USERS SET {', '.join(update_fields)} WHERE username = %s"
         
-        cursor.execute(query, tuple(update_values))
-        db.commit()
-        affected_rows = cursor.rowcount
-        cursor.close()        
+        affected_rows = await async_db_manager.execute_command_async(query, tuple(update_values))
+        
         if affected_rows > 0:
-            cursor = db.cursor()
-            cursor.execute("SELECT username, email FROM PFT.USERS WHERE username = %s", (username,))
-            user = cursor.fetchone()
-            cursor.close()
+            user_query = "SELECT username, email FROM PFT.USERS WHERE username = %s"
+            user = await async_db_manager.execute_query_one_async(user_query, (username,))
             
             return {
                 "success": True,
@@ -67,6 +60,7 @@ async def update_user_profile(username, user_data):
             }
         else:
             raise HTTPException(status_code=404, detail="User not found or no changes made")
+            
     except HTTPException:
         raise
     except Exception as e:
@@ -76,12 +70,9 @@ async def update_user_profile(username, user_data):
 async def delete_user_profile(username):
     print(f"Deleting profile for user: {username}")
     try:
-        cursor = db.cursor()
         query = "DELETE FROM PFT.USERS WHERE username = %s"
-        cursor.execute(query, (username,))
-        db.commit()
-        affected_rows = cursor.rowcount
-        cursor.close()
+        affected_rows = await async_db_manager.execute_command_async(query, (username,))
+        
         if affected_rows > 0:
             return {
                 "success": True,
@@ -92,6 +83,7 @@ async def delete_user_profile(username):
             }
         else:
             raise HTTPException(status_code=404, detail="User not found")
+            
     except HTTPException:
         raise
     except Exception as e:
@@ -101,23 +93,26 @@ async def delete_user_profile(username):
 async def update_user_password(request, username, new_password):
     try:
         user_id = request.state.current_user
-        cursor = db.cursor()
+        
         if not new_password:
             raise HTTPException(status_code=400, detail="New password is required")
+            
         user_query = "SELECT * FROM PFT.USERS WHERE id = %s"
-        cursor.execute(user_query, (user_id,))
-        user = cursor.fetchone()
+        user = await async_db_manager.execute_query_one_async(user_query, (user_id,))
+        
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+            
         if user[1] != username:
             raise HTTPException(status_code=403, detail="You are not authorized to update this user's password")
+            
         if bcrypt.checkpw(new_password.encode('utf-8'), user[3].encode('utf-8')):
             raise HTTPException(status_code=400, detail="New password cannot be the same as the old password")
+            
         hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
         update_query = "UPDATE PFT.USERS SET password = %s WHERE id = %s"
-        cursor.execute(update_query, (hashed_password.decode('utf-8'), user_id))
-        db.commit()
-        cursor.close()
+        await async_db_manager.execute_command_async(update_query, (hashed_password.decode('utf-8'), user_id))
+        
         return {
             "success": True,
             "message": "Password updated successfully",
@@ -125,10 +120,9 @@ async def update_user_password(request, username, new_password):
                 "username": username
             }
         }
+        
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
